@@ -23,6 +23,36 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 input[type=number] { -moz-appearance: textfield; }
 `;
 
+const Btn = ({ onClick, disabled, color, children, big, outline }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`ds-display rounded ${big ? 'py-4 text-xl' : 'py-3 text-lg'} px-4 font-semibold tracking-wide uppercase transition-colors w-full`}
+    style={{
+      background: disabled ? C.panelLight : outline ? 'transparent' : color,
+      color: disabled ? C.muted : outline ? color : C.cream,
+      border: outline ? `1px solid ${color}` : '1px solid transparent',
+      opacity: disabled ? 0.6 : 1,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+    }}
+  >
+    {children}
+  </button>
+);
+
+const Chip = ({ children, dim }) => (
+  <span className="ds-num px-2 py-0.5 rounded text-sm" style={{ background: dim ? C.panelLight : C.line, color: C.cream }}>
+    {children}
+  </span>
+);
+
+const Wrap = ({ children }) => (
+  <div className="ds-root min-h-screen px-4 py-6" style={{ background: C.bg, color: C.cream }}>
+    <style>{styles}</style>
+    <div className="max-w-md mx-auto">{children}</div>
+  </div>
+);
+
 function buildGames(bestOf) {
   const g = [
     { kind: 'team', name: '1st 6v6', start: 801, playerIdxs: [0, 1, 2, 3, 4, 5], visits: [], result: null, gameShotPlayer: null },
@@ -257,38 +287,6 @@ export default function App() {
     el.click();
     document.body.removeChild(el);
   };
-
-  // ---------- shared bits ----------
-
-  const Btn = ({ onClick, disabled, color, children, big, outline }) => (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`ds-display rounded ${big ? 'py-4 text-xl' : 'py-3 text-lg'} px-4 font-semibold tracking-wide uppercase transition-colors w-full`}
-      style={{
-        background: disabled ? C.panelLight : outline ? 'transparent' : color,
-        color: disabled ? C.muted : outline ? color : C.cream,
-        border: outline ? `1px solid ${color}` : '1px solid transparent',
-        opacity: disabled ? 0.6 : 1,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
-    >
-      {children}
-    </button>
-  );
-
-  const Chip = ({ children, dim }) => (
-    <span className="ds-num px-2 py-0.5 rounded text-sm" style={{ background: dim ? C.panelLight : C.line, color: C.cream }}>
-      {children}
-    </span>
-  );
-
-  const Wrap = ({ children }) => (
-    <div className="ds-root min-h-screen px-4 py-6" style={{ background: C.bg, color: C.cream }}>
-      <style>{styles}</style>
-      <div className="max-w-md mx-auto">{children}</div>
-    </div>
-  );
 
   // ---------- setup ----------
 
