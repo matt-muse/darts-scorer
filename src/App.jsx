@@ -215,7 +215,16 @@ export default function App() {
   };
 
   const playerStats = () => {
-    const st = players.map(() => ({ points: 0, visits: 0, gameShots: 0, wins: 0, losses: 0, games: 0 }));
+    const st = players.map(() => ({
+      points: 0, visits: 0, checkouts: 0, gameShots: 0, tons: 0, highest: 0,
+      wins: 0, losses: 0, games: 0,
+    }));
+    const logVisit = (p, s) => {
+      st[p].points += s;
+      st[p].visits++;
+      if (s >= 100) st[p].tons++;
+      if (s > st[p].highest) st[p].highest = s;
+    };
     games.forEach(g => {
       if (g.kind === 'team') {
         g.playerIdxs.forEach(p => {
@@ -223,16 +232,21 @@ export default function App() {
           if (g.result === 'win') st[p].wins++;
           if (g.result === 'loss') st[p].losses++;
         });
-        g.visits.forEach(v => { st[v.p].points += v.s; st[v.p].visits++; });
-        if (g.result === 'win' && g.gameShotPlayer !== null) st[g.gameShotPlayer].gameShots++;
+        g.visits.forEach(v => logVisit(v.p, v.s));
+        if (g.result === 'win' && g.gameShotPlayer !== null) {
+          st[g.gameShotPlayer].checkouts++;
+          st[g.gameShotPlayer].gameShots++;
+        }
       } else if (g.player !== null) {
-        st[g.player].games++;
-        if (g.result === 'win') st[g.player].wins++;
-        if (g.result === 'loss') st[g.player].losses++;
+        const p = g.player;
+        st[p].games++;
+        if (g.result === 'win') st[p].wins++;
+        if (g.result === 'loss') st[p].losses++;
         g.legs.forEach(l => {
-          l.visits.forEach(v => { st[g.player].points += v.s; st[g.player].visits++; });
-          if (l.result === 'win') st[g.player].gameShots++;
+          l.visits.forEach(v => logVisit(p, v.s));
+          if (l.result === 'win') st[p].checkouts++;
         });
+        if (g.result === 'win') st[p].gameShots++;
       }
     });
     return st;
@@ -246,11 +260,25 @@ export default function App() {
 
   const avgFor = (s) => {
     if (s.visits === 0) return null;
-    return ((s.points + 60 * s.gameShots) / s.visits).toFixed(2);
+    return ((s.points + 60 * s.checkouts) / s.visits).toFixed(2);
+  };
+
+  // Players ordered by average, best first. Anyone who never threw drops to the bottom.
+  const rankedPlayers = () => {
+    const st = playerStats();
+    return players
+      .map((name, i) => ({ name, i, s: st[i], avg: avgFor(st[i]) }))
+      .sort((a, b) => {
+        const av = a.avg === null ? -1 : parseFloat(a.avg);
+        const bv = b.avg === null ? -1 : parseFloat(b.avg);
+        if (bv !== av) return bv - av;
+        if (b.s.checkouts !== a.s.checkouts) return b.s.checkouts - a.s.checkouts;
+        return a.i - b.i;
+      });
   };
 
   const exportCSV = () => {
-    const st = playerStats();
+    const ranked = rankedPlayers();
     const rec = teamRecord();
     let csv = 'DARTS MATCH SUMMARY\n';
     csv += `${ourTeam} v ${theirTeam}\n`;
@@ -258,10 +286,10 @@ export default function App() {
     csv += 'TEAM RESULT\n';
     csv += `Wins,${rec.w}\nLosses,${rec.l}\nGames,${rec.t}\n\n`;
     csv += 'PLAYER AVERAGES\n';
-    csv += 'Player,Games,Wins,Losses,Visits,Darts,Points,Game Shots,Average\n';
-    players.forEach((p, i) => {
-      const s = st[i];
-      csv += `${p},${s.games},${s.wins},${s.losses},${s.visits},${s.visits * 3},${s.points},${s.gameShots},${avgFor(s) ?? ''}\n`;
+    csv += 'Rank,Player,Games,Wins,Losses,Visits,Darts,Points,Highest Score,100+ Scores,Checkouts,Game Shots,Average\n';
+    ranked.forEach((r, pos) => {
+      const s = r.s;
+      csv += `${pos + 1},${r.name},${s.games},${s.wins},${s.losses},${s.visits},${s.visits * 3},${s.points},${s.highest},${s.tons},${s.checkouts},${s.gameShots},${r.avg ?? ''}\n`;
     });
     csv += '\nGAME BY GAME\n';
     csv += 'Game,Player,Scores,Result,Game Shot\n';
@@ -470,7 +498,7 @@ export default function App() {
                   </div>
                   {l.result && (
                     <span className="ds-display ml-auto uppercase text-sm pt-0.5" style={{ color: l.result === 'win' ? C.green : C.red }}>
-                      {l.result === 'win' ? 'Won · GS +60' : 'Lost'}
+                      {l.result === 'win' ? 'Won · +60' : 'Lost'}
                     </span>
                   )}
                 </div>
@@ -514,7 +542,7 @@ export default function App() {
                 {isTeam ? 'We lost' : 'Lost the leg'}
               </Btn>
             </div>
-            {!isTeam && <p className="text-sm mt-3" style={{ color: C.muted }}>A won leg is the game shot: {players[game.player]} gets 60 added, no darts counted.</p>}
+            {!isTeam && <p className="text-sm mt-3" style={{ color: C.muted }}>A won leg is a checkout: {players[game.player]} gets 60 added, no darts counted.</p>}
             {endEarly && !onFinish && (
               <button onClick={() => setEndEarly(false)} className="text-sm mt-3 underline" style={{ color: C.muted }}>Back to scoring</button>
             )}
@@ -561,7 +589,7 @@ export default function App() {
   // ---------- summary ----------
 
   if (screen === 'summary') {
-    const st = playerStats();
+    const ranked = rankedPlayers();
     const rec = teamRecord();
     return (
       <Wrap>
@@ -587,33 +615,44 @@ export default function App() {
           </div>
         </div>
 
-        <div className="rounded-lg p-4 mb-4 overflow-x-auto" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
-          <div className="ds-display uppercase tracking-wide mb-2" style={{ color: C.brass }}>Averages</div>
-          <table className="w-full text-sm ds-num">
-            <thead>
-              <tr className="ds-display uppercase text-left" style={{ color: C.muted }}>
-                <th className="py-1.5 pr-2 font-medium">Player</th>
-                <th className="py-1.5 px-1 font-medium text-center">P</th>
-                <th className="py-1.5 px-1 font-medium text-center">W</th>
-                <th className="py-1.5 px-1 font-medium text-center">L</th>
-                <th className="py-1.5 px-1 font-medium text-center">GS</th>
-                <th className="py-1.5 pl-1 font-medium text-right">Avg</th>
-              </tr>
-            </thead>
-            <tbody>
-              {players.map((p, i) => (
-                <tr key={i} style={{ borderTop: `1px solid ${C.line}` }}>
-                  <td className="py-2 pr-2">{p}</td>
-                  <td className="py-2 px-1 text-center" style={{ color: C.muted }}>{st[i].games}</td>
-                  <td className="py-2 px-1 text-center" style={{ color: C.green }}>{st[i].wins}</td>
-                  <td className="py-2 px-1 text-center" style={{ color: C.red }}>{st[i].losses}</td>
-                  <td className="py-2 px-1 text-center" style={{ color: C.brass }}>{st[i].gameShots}</td>
-                  <td className="py-2 pl-1 text-right ds-display text-base font-semibold">{avgFor(st[i]) ?? '\u2014'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="text-xs mt-2" style={{ color: C.muted }}>Average is per visit (3 darts). Each game shot adds 60 with no darts counted.</p>
+        <div className="rounded-lg p-4 mb-4" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+          <div className="ds-display uppercase tracking-wide mb-1" style={{ color: C.brass }}>Averages</div>
+          <p className="text-xs mb-1" style={{ color: C.muted }}>Best to worst on the night.</p>
+          {ranked.map((r, pos) => (
+            <div key={r.i} className="py-3" style={{ borderTop: `1px solid ${C.line}` }}>
+              <div className="flex items-baseline gap-2.5">
+                <span className="ds-display ds-num text-lg font-bold w-5 shrink-0" style={{ color: pos === 0 ? C.brass : C.muted }}>
+                  {pos + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="ds-display uppercase tracking-wide truncate">{r.name}</div>
+                  <div className="ds-num text-xs mt-0.5" style={{ color: C.muted }}>
+                    {r.s.games} played &middot; <span style={{ color: C.green }}>{r.s.wins}W</span> <span style={{ color: C.red }}>{r.s.losses}L</span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="ds-display ds-num text-3xl font-bold leading-none">{r.avg ?? '\u2014'}</div>
+                  <div className="ds-display uppercase tracking-widest text-xs mt-0.5" style={{ color: C.muted }}>Avg</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 mt-2.5 pl-7">
+                {[
+                  ['Highest', r.s.highest || '\u2014'],
+                  ['100+', r.s.tons],
+                  ['Checkouts', r.s.checkouts],
+                  ['Game shots', r.s.gameShots],
+                ].map(([label, val]) => (
+                  <div key={label} className="rounded px-1 py-1.5 text-center" style={{ background: C.panelLight }}>
+                    <div className="ds-display ds-num text-xl font-semibold leading-none" style={{ color: val ? C.cream : C.muted }}>{val}</div>
+                    <div className="ds-display uppercase tracking-wide mt-1" style={{ color: C.muted, fontSize: '0.6rem' }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <p className="text-xs mt-3" style={{ color: C.muted }}>
+            Average is per visit (3 darts). Each checkout adds 60 with no darts counted. Checkouts are every winning double thrown; game shots are the ones that took the game.
+          </p>
         </div>
 
         <div className="rounded-lg p-4 mb-4" style={{ background: C.panel, border: `1px solid ${C.line}` }}>

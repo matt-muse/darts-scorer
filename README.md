@@ -21,7 +21,9 @@ The app follows the full team match structure:
 - Singles player picker that removes players once they have played
 - Quick score entry (type and press enter)
 - Win/loss and game shot recording per game
-- Player averages with a 60-point (3 dart) bonus for each game shot
+- Player averages with a 60-point (3 dart) bonus for each checkout
+- End of match stats per player: highest score, 100+ scores, checkouts and game shots
+- Averages ranked best to worst on the night
 - Full match summary and CSV export
 
 ## Development
