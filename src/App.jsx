@@ -53,7 +53,24 @@ const Wrap = ({ children }) => (
   </div>
 );
 
-function buildGames(bestOf) {
+function buildGames(teamSize, straightEightOpener) {
+  if (teamSize === 8) {
+    const g = [];
+    if (straightEightOpener) {
+      g.push({ kind: 'team', name: 'Straight Eight (Opener)', start: 1001, playerIdxs: [0, 1, 2, 3, 4, 5, 6, 7], visits: [], result: null, gameShotPlayer: null });
+    }
+    g.push({ kind: 'team', name: 'First Four', start: 801, playerIdxs: [0, 1, 2, 3], visits: [], result: null, gameShotPlayer: null });
+    g.push({ kind: 'team', name: 'Second Four', start: 801, playerIdxs: [4, 5, 6, 7], visits: [], result: null, gameShotPlayer: null });
+    g.push({ kind: 'team', name: 'First Pair', start: 601, playerIdxs: [0, 1], visits: [], result: null, gameShotPlayer: null });
+    g.push({ kind: 'team', name: 'Second Pair', start: 601, playerIdxs: [2, 3], visits: [], result: null, gameShotPlayer: null });
+    g.push({ kind: 'team', name: 'Third Pair', start: 601, playerIdxs: [4, 5], visits: [], result: null, gameShotPlayer: null });
+    g.push({ kind: 'team', name: 'Fourth Pair', start: 601, playerIdxs: [6, 7], visits: [], result: null, gameShotPlayer: null });
+    for (let i = 1; i <= 8; i++) {
+      g.push({ kind: 'singles', name: `Singles ${i}`, start: 501, player: null, legs: [{ visits: [], result: null }], result: null });
+    }
+    g.push({ kind: 'team', name: 'Straight Eight', start: 1001, playerIdxs: [0, 1, 2, 3, 4, 5, 6, 7], visits: [], result: null, gameShotPlayer: null });
+    return g;
+  }
   const g = [
     { kind: 'team', name: '1st 6v6', start: 801, playerIdxs: [0, 1, 2, 3, 4, 5], visits: [], result: null, gameShotPlayer: null },
     { kind: 'team', name: '1st 3v3', start: 701, playerIdxs: [0, 1, 2], visits: [], result: null, gameShotPlayer: null },
@@ -73,6 +90,8 @@ export default function App() {
   const [screen, setScreen] = useState('setup');
   const [ourTeam, setOurTeam] = useState('');
   const [theirTeam, setTheirTeam] = useState('');
+  const [teamSize, setTeamSize] = useState(6);
+  const [straightEightOpener, setStraightEightOpener] = useState(false);
   const [players, setPlayers] = useState([]);
   const [newPlayer, setNewPlayer] = useState('');
   const [games, setGames] = useState([]);
@@ -85,16 +104,23 @@ export default function App() {
 
   const addPlayer = () => {
     const n = newPlayer.trim();
-    if (n && players.length < 6 && !players.includes(n)) {
+    if (n && players.length < teamSize && !players.includes(n)) {
       setPlayers([...players, n]);
       setNewPlayer('');
     }
   };
 
+  const chooseTeamSize = (size) => {
+    setTeamSize(size);
+    if (players.length > size) setPlayers(players.slice(0, size));
+    if (size !== 8) setStraightEightOpener(false);
+  };
+
   const startMatch = () => {
-    if (ourTeam && theirTeam && players.length === 6) {
-      setGames(buildGames());
+    if (ourTeam && theirTeam && players.length === teamSize) {
+      setGames(buildGames(teamSize, straightEightOpener));
       setGameIdx(0);
+      if (teamSize === 8) setSinglesBestOf(1);
       setScreen('scoring');
     }
   };
@@ -103,6 +129,7 @@ export default function App() {
     setScreen('setup'); setOurTeam(''); setTheirTeam(''); setPlayers([]); setNewPlayer('');
     setGames([]); setGameIdx(0); setScoreInput(''); setInputError('');
     setSinglesBestOf(null); setPendingWin(false); setEndEarly(false);
+    setTeamSize(6); setStraightEightOpener(false);
   };
 
   const game = games[gameIdx];
@@ -165,6 +192,25 @@ export default function App() {
     setInputError('');
   };
 
+  const appendDigit = (d) => {
+    setInputError('');
+    setScoreInput(prev => {
+      const next = (prev === '0' ? '' : prev) + d;
+      if (next.length > 3 || parseInt(next, 10) > 180) return prev;
+      return next;
+    });
+  };
+
+  const backspaceDigit = () => {
+    setInputError('');
+    setScoreInput(prev => prev.slice(0, -1));
+  };
+
+  const clearDigits = () => {
+    setInputError('');
+    setScoreInput('');
+  };
+
   const finishTeam = (result, gsPlayer) => {
     const updated = [...games];
     updated[gameIdx] = { ...updated[gameIdx], result, gameShotPlayer: gsPlayer ?? null };
@@ -215,7 +261,12 @@ export default function App() {
   };
 
   const playerStats = () => {
-    const st = players.map(() => ({ points: 0, visits: 0, gameShots: 0, wins: 0, losses: 0, games: 0 }));
+    const st = players.map(() => ({ points: 0, visits: 0, gameShots: 0, wins: 0, losses: 0, games: 0, oneEighties: 0, tonForty: 0, ton: 0 }));
+    const tally = (p, s) => {
+      if (s === 180) st[p].oneEighties++;
+      else if (s >= 140) st[p].tonForty++;
+      else if (s >= 100) st[p].ton++;
+    };
     games.forEach(g => {
       if (g.kind === 'team') {
         g.playerIdxs.forEach(p => {
@@ -223,14 +274,14 @@ export default function App() {
           if (g.result === 'win') st[p].wins++;
           if (g.result === 'loss') st[p].losses++;
         });
-        g.visits.forEach(v => { st[v.p].points += v.s; st[v.p].visits++; });
+        g.visits.forEach(v => { st[v.p].points += v.s; st[v.p].visits++; tally(v.p, v.s); });
         if (g.result === 'win' && g.gameShotPlayer !== null) st[g.gameShotPlayer].gameShots++;
       } else if (g.player !== null) {
         st[g.player].games++;
         if (g.result === 'win') st[g.player].wins++;
         if (g.result === 'loss') st[g.player].losses++;
         g.legs.forEach(l => {
-          l.visits.forEach(v => { st[g.player].points += v.s; st[g.player].visits++; });
+          l.visits.forEach(v => { st[g.player].points += v.s; st[g.player].visits++; tally(g.player, v.s); });
           if (l.result === 'win') st[g.player].gameShots++;
         });
       }
@@ -258,10 +309,13 @@ export default function App() {
     csv += 'TEAM RESULT\n';
     csv += `Wins,${rec.w}\nLosses,${rec.l}\nGames,${rec.t}\n\n`;
     csv += 'PLAYER AVERAGES\n';
-    csv += 'Player,Games,Wins,Losses,Visits,Darts,Points,Game Shots,Average\n';
-    players.forEach((p, i) => {
+    csv += 'Player,Games,Wins,Losses,Visits,Darts,Points,Game Shots,180s,140+,100+,Average\n';
+    const ranked = players
+      .map((p, i) => ({ name: p, idx: i, avg: st[i].visits ? parseFloat(avgFor(st[i])) : -1 }))
+      .sort((a, b) => b.avg - a.avg);
+    ranked.forEach(({ name: p, idx: i }) => {
       const s = st[i];
-      csv += `${p},${s.games},${s.wins},${s.losses},${s.visits},${s.visits * 3},${s.points},${s.gameShots},${avgFor(s) ?? ''}\n`;
+      csv += `${p},${s.games},${s.wins},${s.losses},${s.visits},${s.visits * 3},${s.points},${s.gameShots},${s.oneEighties},${s.tonForty},${s.ton},${avgFor(s) ?? ''}\n`;
     });
     csv += '\nGAME BY GAME\n';
     csv += 'Game,Player,Scores,Result,Game Shot\n';
@@ -319,8 +373,26 @@ export default function App() {
           </div>
 
           <div>
+            <label className="ds-display text-sm uppercase tracking-widest" style={{ color: C.muted }}>Match format</label>
+            <div className="flex gap-2 mt-1">
+              <Btn onClick={() => chooseTeamSize(6)} color={C.green} outline={teamSize !== 6}>6 players</Btn>
+              <Btn onClick={() => chooseTeamSize(8)} color={C.green} outline={teamSize !== 8}>8 players</Btn>
+            </div>
+            {teamSize === 8 && (
+              <label className="flex items-center gap-2 text-sm mt-3" style={{ color: C.cream }}>
+                <input
+                  type="checkbox" checked={straightEightOpener}
+                  onChange={e => setStraightEightOpener(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                Also play a Straight Eight to open the match (as well as the closer)
+              </label>
+            )}
+          </div>
+
+          <div>
             <label className="ds-display text-sm uppercase tracking-widest" style={{ color: C.muted }}>
-              Playing order ({players.length}/6)
+              Playing order ({players.length}/{teamSize})
             </label>
             <div className="space-y-1.5 mt-2">
               {players.map((p, i) => (
@@ -330,7 +402,7 @@ export default function App() {
                 </div>
               ))}
             </div>
-            {players.length < 6 && (
+            {players.length < teamSize && (
               <div className="flex gap-2 mt-2">
                 <input
                   type="text" value={newPlayer} onChange={e => setNewPlayer(e.target.value)}
@@ -344,7 +416,7 @@ export default function App() {
             )}
           </div>
 
-          <Btn onClick={startMatch} disabled={!ourTeam || !theirTeam || players.length !== 6} color={C.green} big>
+          <Btn onClick={startMatch} disabled={!ourTeam || !theirTeam || players.length !== teamSize} color={C.green} big>
             Game on
           </Btn>
         </div>
@@ -482,19 +554,36 @@ export default function App() {
         {/* score entry */}
         {showInput && (
           <div className="mb-4">
-            <div className="flex gap-2">
-              <input
-                type="number" inputMode="numeric" value={scoreInput}
-                onChange={e => setScoreInput(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && submitScore()}
-                className="ds-display ds-num flex-1 px-3 py-3 rounded outline-none text-center text-2xl"
-                style={{ background: C.panel, color: C.cream, border: `1px solid ${C.line}` }}
-                placeholder={isTeam ? `${players[throwerIdx()]} scores...` : 'Score...'}
-                autoFocus
-              />
-              <button onClick={submitScore} className="ds-display px-6 rounded uppercase font-semibold text-lg" style={{ background: C.green, color: C.cream }}>Enter</button>
-              <button onClick={undoScore} className="ds-display px-4 rounded uppercase font-semibold" style={{ background: C.panel, color: C.red, border: `1px solid ${C.line}` }}>Undo</button>
+            <div className="rounded-lg px-4 py-3 mb-3 text-center" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+              <div className="ds-display uppercase tracking-widest text-xs mb-1" style={{ color: C.muted }}>
+                {isTeam ? `${players[throwerIdx()]} to throw` : 'Enter score'}
+              </div>
+              <div className="ds-display ds-num font-bold leading-none" style={{ fontSize: '2.75rem', color: scoreInput ? C.cream : C.muted }}>
+                {scoreInput || '0'}
+              </div>
             </div>
+
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                <button
+                  key={n}
+                  onClick={() => appendDigit(String(n))}
+                  className="ds-display ds-num py-4 rounded text-2xl font-semibold transition-colors"
+                  style={{ background: C.panel, color: C.cream, border: `1px solid ${C.line}` }}
+                >
+                  {n}
+                </button>
+              ))}
+              <button onClick={clearDigits} className="ds-display py-4 rounded text-lg font-semibold uppercase transition-colors" style={{ background: C.panel, color: C.red, border: `1px solid ${C.line}` }}>C</button>
+              <button onClick={() => appendDigit('0')} className="ds-display ds-num py-4 rounded text-2xl font-semibold transition-colors" style={{ background: C.panel, color: C.cream, border: `1px solid ${C.line}` }}>0</button>
+              <button onClick={backspaceDigit} className="ds-display py-4 rounded text-xl font-semibold transition-colors" style={{ background: C.panel, color: C.cream, border: `1px solid ${C.line}` }}>⌫</button>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={undoScore} className="ds-display px-5 rounded uppercase font-semibold" style={{ background: C.panel, color: C.red, border: `1px solid ${C.line}` }}>Undo</button>
+              <button onClick={submitScore} className="ds-display flex-1 py-3 rounded uppercase font-semibold text-lg" style={{ background: C.green, color: C.cream }}>Enter</button>
+            </div>
+
             {inputError && <p className="text-sm mt-2" style={{ color: C.red }}>{inputError}</p>}
             <button onClick={() => setEndEarly(true)} className="text-sm mt-3 underline" style={{ color: C.muted }}>
               Game's finished already? Record the result
@@ -563,6 +652,9 @@ export default function App() {
   if (screen === 'summary') {
     const st = playerStats();
     const rec = teamRecord();
+    const ranked = players
+      .map((p, i) => ({ name: p, idx: i, avg: st[i].visits ? parseFloat(avgFor(st[i])) : -1 }))
+      .sort((a, b) => b.avg - a.avg);
     return (
       <Wrap>
         <div className="text-center mb-6 mt-2">
@@ -597,17 +689,23 @@ export default function App() {
                 <th className="py-1.5 px-1 font-medium text-center">W</th>
                 <th className="py-1.5 px-1 font-medium text-center">L</th>
                 <th className="py-1.5 px-1 font-medium text-center">GS</th>
+                <th className="py-1.5 px-1 font-medium text-center">180</th>
+                <th className="py-1.5 px-1 font-medium text-center">140+</th>
+                <th className="py-1.5 px-1 font-medium text-center">100+</th>
                 <th className="py-1.5 pl-1 font-medium text-right">Avg</th>
               </tr>
             </thead>
             <tbody>
-              {players.map((p, i) => (
+              {ranked.map(({ name: p, idx: i }) => (
                 <tr key={i} style={{ borderTop: `1px solid ${C.line}` }}>
                   <td className="py-2 pr-2">{p}</td>
                   <td className="py-2 px-1 text-center" style={{ color: C.muted }}>{st[i].games}</td>
                   <td className="py-2 px-1 text-center" style={{ color: C.green }}>{st[i].wins}</td>
                   <td className="py-2 px-1 text-center" style={{ color: C.red }}>{st[i].losses}</td>
                   <td className="py-2 px-1 text-center" style={{ color: C.brass }}>{st[i].gameShots}</td>
+                  <td className="py-2 px-1 text-center" style={{ color: st[i].oneEighties ? C.brass : C.muted }}>{st[i].oneEighties || '\u2014'}</td>
+                  <td className="py-2 px-1 text-center" style={{ color: st[i].tonForty ? C.cream : C.muted }}>{st[i].tonForty || '\u2014'}</td>
+                  <td className="py-2 px-1 text-center" style={{ color: st[i].ton ? C.cream : C.muted }}>{st[i].ton || '\u2014'}</td>
                   <td className="py-2 pl-1 text-right ds-display text-base font-semibold">{avgFor(st[i]) ?? '\u2014'}</td>
                 </tr>
               ))}
