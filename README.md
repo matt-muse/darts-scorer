@@ -22,6 +22,8 @@ The app follows the full team match structure:
 - Quick score entry (type and press enter)
 - Win/loss and game shot recording per game
 - Player averages with a 60-point (3 dart) bonus for each game shot
+- Averages table split by game type (Singles, Pairs, Threes, 6v6 or Fours, Straight 8) with an overall average and a team row, laid out like the club spreadsheet
+- Checkout entry after each win, with highest checkout per player and for the match
 - Full match summary and CSV export
 
 ## Development
