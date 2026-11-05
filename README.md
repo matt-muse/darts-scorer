@@ -4,20 +4,23 @@ A digital scoring app for team darts matches, replacing the paper scoresheets.
 
 ## Match Format
 
-The app follows the full team match structure:
+Before the match you choose the format by tapping buttons:
 
-1. 1st 6v6
-2. 1st 3v3 (players 1-3)
-3. 2nd 3v3 (players 4-6)
-4. 1st 2v2 (players 1-2)
-5. 2nd 2v2 (players 3-4)
-6. 3rd 2v2 (players 5-6)
-7. Singles (drawn at random, chosen from remaining players)
-8. Final 6v6
+1. **How many players:** 6 or 8.
+2. **Order of games:** tap the game types in the order you'll play them.
+   - 6 players: 1v1, 2v2, 3v3 and 6v6
+   - 8 players: 1v1, 2v2, 4v4 and 8v8 (the Straight Eight)
+   - Every game type has to go in at least once.
+   - The 6v6 or 8v8 can open the match, close it, or both.
+   - "Use the usual order" fills in the standard running order for you.
+
+Pairs, threes and fours are set by playing order (players 1 and 2 are partners, and so on). When a block comes round, you pick which pair, three or four plays next. Singles players are picked the same way, from those who haven't played yet.
+
+Starting scores: singles 501, 2v2 601, 3v3 701, 4v4 and 6v6 801, 8v8 1001.
 
 ## Features
 
-- Enter your 6 players in order and they auto-fill for each game
+- Enter your players in order and they auto-fill for each game
 - Singles player picker that removes players once they have played
 - Quick score entry (type and press enter)
 - Win/loss and game shot recording per game
