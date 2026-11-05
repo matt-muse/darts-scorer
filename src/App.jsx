@@ -53,7 +53,7 @@ const categoriesFor = (teamSize) => teamSize === 8
   : ['Singles', 'Pairs', 'Threes', '6v6'];
 
 const categoryOf = (g) => {
-  const n = g.kind === 'singles' ? 1 : g.playerIdxs.length;
+  const n = g.kind === 'singles' ? 1 : g.size;
   return { 1: 'Singles', 2: 'Pairs', 3: 'Threes', 4: 'Fours', 6: '6v6', 8: 'Straight 8' }[n];
 };
 
@@ -68,36 +68,71 @@ const Wrap = ({ children }) => (
   </div>
 );
 
-function buildGames(teamSize, straightEightOpener) {
-  if (teamSize === 8) {
-    const g = [];
-    if (straightEightOpener) {
-      g.push({ kind: 'team', name: 'Straight Eight (Opener)', start: 1001, playerIdxs: [0, 1, 2, 3, 4, 5, 6, 7], visits: [], result: null, gameShotPlayer: null });
-    }
-    g.push({ kind: 'team', name: 'First Four', start: 801, playerIdxs: [0, 1, 2, 3], visits: [], result: null, gameShotPlayer: null });
-    g.push({ kind: 'team', name: 'Second Four', start: 801, playerIdxs: [4, 5, 6, 7], visits: [], result: null, gameShotPlayer: null });
-    g.push({ kind: 'team', name: 'First Pair', start: 601, playerIdxs: [0, 1], visits: [], result: null, gameShotPlayer: null });
-    g.push({ kind: 'team', name: 'Second Pair', start: 601, playerIdxs: [2, 3], visits: [], result: null, gameShotPlayer: null });
-    g.push({ kind: 'team', name: 'Third Pair', start: 601, playerIdxs: [4, 5], visits: [], result: null, gameShotPlayer: null });
-    g.push({ kind: 'team', name: 'Fourth Pair', start: 601, playerIdxs: [6, 7], visits: [], result: null, gameShotPlayer: null });
-    for (let i = 1; i <= 8; i++) {
-      g.push({ kind: 'singles', name: `Singles ${i}`, start: 501, player: null, legs: [{ visits: [], result: null }], result: null });
-    }
-    g.push({ kind: 'team', name: 'Straight Eight', start: 1001, playerIdxs: [0, 1, 2, 3, 4, 5, 6, 7], visits: [], result: null, gameShotPlayer: null });
-    return g;
-  }
-  const g = [
-    { kind: 'team', name: '1st 6v6', start: 801, playerIdxs: [0, 1, 2, 3, 4, 5], visits: [], result: null, gameShotPlayer: null },
-    { kind: 'team', name: '1st 3v3', start: 701, playerIdxs: [0, 1, 2], visits: [], result: null, gameShotPlayer: null },
-    { kind: 'team', name: '2nd 3v3', start: 701, playerIdxs: [3, 4, 5], visits: [], result: null, gameShotPlayer: null },
-    { kind: 'team', name: '1st 2v2', start: 601, playerIdxs: [0, 1], visits: [], result: null, gameShotPlayer: null },
-    { kind: 'team', name: '2nd 2v2', start: 601, playerIdxs: [2, 3], visits: [], result: null, gameShotPlayer: null },
-    { kind: 'team', name: '3rd 2v2', start: 601, playerIdxs: [4, 5], visits: [], result: null, gameShotPlayer: null },
+// The blocks of games a match can be made from. 'all' is the whole team
+// (6v6 or Straight Eight) and is the only block that can be picked twice.
+const blocksFor = (teamSize) => teamSize === 8
+  ? [
+    { key: 'singles', label: '1v1', size: 1 },
+    { key: 'pairs', label: '2v2', size: 2, start: 601 },
+    { key: 'fours', label: '4v4', size: 4, start: 801 },
+    { key: 'all', label: '8v8', size: 8, start: 1001 },
+  ]
+  : [
+    { key: 'singles', label: '1v1', size: 1 },
+    { key: 'pairs', label: '2v2', size: 2, start: 601 },
+    { key: 'threes', label: '3v3', size: 3, start: 701 },
+    { key: 'all', label: '6v6', size: 6, start: 801 },
   ];
-  for (let i = 1; i <= 6; i++) {
-    g.push({ kind: 'singles', name: `Singles ${i}`, start: 501, player: null, legs: [{ visits: [], result: null }], result: null });
-  }
-  g.push({ kind: 'team', name: 'Final 6v6', start: 801, playerIdxs: [0, 1, 2, 3, 4, 5], visits: [], result: null, gameShotPlayer: null });
+
+const usualOrder = (teamSize) => teamSize === 8
+  ? ['fours', 'pairs', 'singles', 'all']
+  : ['all', 'threes', 'pairs', 'singles', 'all'];
+
+const ordinal = (n) => ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'][n - 1];
+
+// Can this block be added to the end of the running order? Everything goes in
+// once, apart from the whole-team game, which can only open or close the match.
+const canAddBlock = (key, order, teamSize) => {
+  const count = order.filter(k => k === key).length;
+  if (key !== 'all') return count === 0;
+  if (count >= 2 || order[order.length - 1] === 'all') return false;
+  const othersDone = blocksFor(teamSize).every(b => b.key === 'all' || order.includes(b.key));
+  return order.length === 0 || othersDone;
+};
+
+const orderComplete = (order, teamSize) => blocksFor(teamSize).every(b => order.includes(b.key));
+
+const blockGameCount = (b, teamSize) => b.key === 'singles' ? teamSize : teamSize / b.size;
+
+function buildGames(teamSize, order) {
+  const blocks = Object.fromEntries(blocksFor(teamSize).map(b => [b.key, b]));
+  const allCount = order.filter(k => k === 'all').length;
+  let allSeen = 0;
+  const g = [];
+  order.forEach(key => {
+    const b = blocks[key];
+    if (key === 'singles') {
+      for (let i = 1; i <= teamSize; i++) {
+        g.push({ kind: 'singles', name: `Singles ${i}`, start: 501, player: null, legs: [{ visits: [], result: null }], result: null });
+      }
+      return;
+    }
+    if (key === 'all') {
+      allSeen++;
+      let name;
+      if (teamSize === 8) name = allCount === 2 && allSeen === 1 ? 'Straight Eight (Opener)' : 'Straight Eight';
+      else name = allCount === 1 ? '6v6' : allSeen === 1 ? '1st 6v6' : 'Final 6v6';
+      g.push({ kind: 'team', name, start: b.start, size: b.size, block: key, playerIdxs: Array.from({ length: teamSize }, (_, i) => i), visits: [], result: null, gameShotPlayer: null });
+      return;
+    }
+    // Pairs, threes and fours are fixed by playing order (1 and 2 are partners
+    // and so on). Which group plays next is chosen when the game comes round.
+    const groups = [];
+    for (let i = 0; i < teamSize; i += b.size) groups.push(Array.from({ length: b.size }, (_, j) => i + j));
+    groups.forEach((_, i) => {
+      g.push({ kind: 'team', name: `${ordinal(i + 1)} ${b.label}`, start: b.start, size: b.size, block: key, groups, playerIdxs: null, visits: [], result: null, gameShotPlayer: null });
+    });
+  });
   return g;
 }
 
@@ -106,7 +141,7 @@ export default function App() {
   const [ourTeam, setOurTeam] = useState('');
   const [theirTeam, setTheirTeam] = useState('');
   const [teamSize, setTeamSize] = useState(6);
-  const [straightEightOpener, setStraightEightOpener] = useState(false);
+  const [order, setOrder] = useState([]);
   const [players, setPlayers] = useState([]);
   const [newPlayer, setNewPlayer] = useState('');
   const [games, setGames] = useState([]);
@@ -129,12 +164,12 @@ export default function App() {
   const chooseTeamSize = (size) => {
     setTeamSize(size);
     if (players.length > size) setPlayers(players.slice(0, size));
-    if (size !== 8) setStraightEightOpener(false);
+    if (size !== teamSize) setOrder([]);
   };
 
   const startMatch = () => {
-    if (ourTeam && theirTeam && players.length === teamSize) {
-      setGames(buildGames(teamSize, straightEightOpener));
+    if (ourTeam && theirTeam && players.length === teamSize && orderComplete(order, teamSize)) {
+      setGames(buildGames(teamSize, order));
       setGameIdx(0);
       if (teamSize === 8) setSinglesBestOf(1);
       setScreen('scoring');
@@ -145,7 +180,7 @@ export default function App() {
     setScreen('setup'); setOurTeam(''); setTheirTeam(''); setPlayers([]); setNewPlayer('');
     setGames([]); setGameIdx(0); setScoreInput(''); setInputError('');
     setSinglesBestOf(null); setPendingWin(false); setEndEarly(false); setCheckoutFor(null);
-    setTeamSize(6); setStraightEightOpener(false);
+    setTeamSize(6); setOrder([]);
   };
 
   const game = games[gameIdx];
@@ -312,6 +347,17 @@ export default function App() {
     setGames(updated);
   };
 
+  const pickGroup = (group) => {
+    const updated = [...games];
+    updated[gameIdx] = { ...updated[gameIdx], playerIdxs: group };
+    setGames(updated);
+  };
+
+  const availableGroups = () => {
+    const used = games.filter(g => g.block === game.block && g.playerIdxs).map(g => g.playerIdxs[0]);
+    return game.groups.filter(grp => !used.includes(grp[0]));
+  };
+
   const availableSingles = () => {
     const used = games.filter(g => g.kind === 'singles' && g.player !== null).map(g => g.player);
     return players.map((_, i) => i).filter(i => !used.includes(i));
@@ -334,7 +380,7 @@ export default function App() {
     };
     games.forEach(g => {
       if (g.kind === 'team') {
-        g.playerIdxs.forEach(p => {
+        (g.playerIdxs || []).forEach(p => {
           st[p].games++;
           if (g.result === 'win') st[p].wins++;
           if (g.result === 'loss') st[p].losses++;
@@ -420,7 +466,7 @@ export default function App() {
     csv += 'Game,Player,Scores,Result,Game Shot,Checkout\n';
     games.forEach(g => {
       if (g.kind === 'team') {
-        g.playerIdxs.forEach(p => {
+        (g.playerIdxs || []).forEach(p => {
           const scores = g.visits.filter(v => v.p === p).map(v => v.s).join(' ');
           const gs = g.gameShotPlayer === p ? 'Yes' : '';
           const co = g.gameShotPlayer === p ? (g.checkout ?? '') : '';
@@ -445,11 +491,78 @@ export default function App() {
   // ---------- setup ----------
 
   if (screen === 'setup') {
+    const allLabel = teamSize === 8 ? '8v8' : '6v6';
     return (
       <Wrap>
         <div className="text-center mb-8 mt-4">
           <div className="ds-display text-5xl font-bold tracking-wide" style={{ color: C.cream }}>MATCH NIGHT</div>
           <div className="ds-display text-lg tracking-[0.3em] uppercase mt-1" style={{ color: C.brass }}>Team Darts Scorer</div>
+        </div>
+
+        <div className="rounded-lg p-5 space-y-5 mb-4" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+          <div>
+            <label className="ds-display text-sm uppercase tracking-widest" style={{ color: C.muted }}>1. How many players?</label>
+            <div className="flex gap-2 mt-1">
+              <Btn onClick={() => chooseTeamSize(6)} color={C.green} outline={teamSize !== 6}>6 players</Btn>
+              <Btn onClick={() => chooseTeamSize(8)} color={C.green} outline={teamSize !== 8}>8 players</Btn>
+            </div>
+          </div>
+
+          <div>
+            <label className="ds-display text-sm uppercase tracking-widest" style={{ color: C.muted }}>2. Order of games</label>
+            <p className="text-sm mt-1 mb-2" style={{ color: C.muted }}>
+              Tap the games in the order you'll play them. Every game type goes in once. The {allLabel} can open the match, close it, or both.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {blocksFor(teamSize).map(b => {
+                const ok = canAddBlock(b.key, order, teamSize);
+                const placed = order.filter(k => k === b.key).length;
+                return (
+                  <button
+                    key={b.key}
+                    onClick={() => ok && setOrder([...order, b.key])}
+                    disabled={!ok}
+                    className="ds-display rounded py-4 text-2xl font-bold transition-colors"
+                    style={{
+                      background: ok ? C.green : C.panelLight,
+                      color: ok ? C.cream : C.muted,
+                      border: `1px solid ${ok ? C.green : C.line}`,
+                      opacity: ok ? 1 : 0.6,
+                      cursor: ok ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {b.label}
+                    <div className="text-xs font-medium uppercase tracking-widest mt-0.5">
+                      {placed ? `added${placed > 1 ? ' twice' : ''}` : `${blockGameCount(b, teamSize)} game${blockGameCount(b, teamSize) > 1 ? 's' : ''}`}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="space-y-1.5 mt-3">
+              {order.map((key, i) => {
+                const b = blocksFor(teamSize).find(x => x.key === key);
+                const n = blockGameCount(b, teamSize);
+                return (
+                  <div key={i} className="flex items-center justify-between px-3 py-2 rounded" style={{ background: C.bg, border: `1px solid ${C.line}` }}>
+                    <span><span className="ds-display mr-2" style={{ color: C.brass }}>{i + 1}</span><span className="ds-display uppercase">{b.label}</span></span>
+                    <span className="text-sm" style={{ color: C.muted }}>{n} game{n > 1 ? 's' : ''}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-4 mt-2 text-sm">
+              {order.length > 0 && <button onClick={() => setOrder(order.slice(0, -1))} className="underline" style={{ color: C.muted }}>Undo last</button>}
+              {order.length > 0 && <button onClick={() => setOrder([])} className="underline" style={{ color: C.muted }}>Start again</button>}
+              {order.length === 0 && <button onClick={() => setOrder(usualOrder(teamSize))} className="underline" style={{ color: C.muted }}>Use the usual order</button>}
+            </div>
+            {order.length > 0 && !orderComplete(order, teamSize) && (
+              <p className="text-sm mt-2" style={{ color: C.brass }}>
+                Still to add: {blocksFor(teamSize).filter(b => !order.includes(b.key)).map(b => b.label).join(', ')}
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="rounded-lg p-5 space-y-5" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
@@ -470,24 +583,6 @@ export default function App() {
               style={{ background: C.bg, color: C.cream, border: `1px solid ${C.line}` }}
               placeholder="Their team"
             />
-          </div>
-
-          <div>
-            <label className="ds-display text-sm uppercase tracking-widest" style={{ color: C.muted }}>Match format</label>
-            <div className="flex gap-2 mt-1">
-              <Btn onClick={() => chooseTeamSize(6)} color={C.green} outline={teamSize !== 6}>6 players</Btn>
-              <Btn onClick={() => chooseTeamSize(8)} color={C.green} outline={teamSize !== 8}>8 players</Btn>
-            </div>
-            {teamSize === 8 && (
-              <label className="flex items-center gap-2 text-sm mt-3" style={{ color: C.cream }}>
-                <input
-                  type="checkbox" checked={straightEightOpener}
-                  onChange={e => setStraightEightOpener(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                Also play a Straight Eight to open the match (as well as the closer)
-              </label>
-            )}
           </div>
 
           <div>
@@ -516,7 +611,7 @@ export default function App() {
             )}
           </div>
 
-          <Btn onClick={startMatch} disabled={!ourTeam || !theirTeam || players.length !== teamSize} color={C.green} big>
+          <Btn onClick={startMatch} disabled={!ourTeam || !theirTeam || players.length !== teamSize || !orderComplete(order, teamSize)} color={C.green} big>
             Game on
           </Btn>
         </div>
@@ -532,6 +627,7 @@ export default function App() {
     const isTeam = game.kind === 'team';
     const singlesNeedsBestOf = !isTeam && singlesBestOf === null;
     const singlesNeedsPlayer = !isTeam && !singlesNeedsBestOf && game.player === null;
+    const teamNeedsGroup = isTeam && !game.playerIdxs;
 
     const header = (
       <div className="mb-5">
@@ -559,6 +655,24 @@ export default function App() {
             <div className="flex gap-3">
               <Btn onClick={() => setSinglesBestOf(1)} color={C.green} big>Best of 1</Btn>
               <Btn onClick={() => setSinglesBestOf(3)} color={C.green} big>Best of 3</Btn>
+            </div>
+          </div>
+        </Wrap>
+      );
+    }
+
+    if (teamNeedsGroup) {
+      const groupWord = { 2: 'pair', 3: 'three', 4: 'four' }[game.size];
+      return (
+        <Wrap>
+          {header}
+          <div className="rounded-lg p-5" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+            <div className="ds-display text-xl uppercase tracking-wide mb-1">Which {groupWord} is up?</div>
+            <p className="text-sm mb-4" style={{ color: C.muted }}>Teams are set by playing order. They drop off the list once they've played.</p>
+            <div className="space-y-2">
+              {availableGroups().map(grp => (
+                <Btn key={grp[0]} onClick={() => pickGroup(grp)} color={C.brassDim}>{grp.map(p => players[p]).join(' & ')}</Btn>
+              ))}
             </div>
           </div>
         </Wrap>
