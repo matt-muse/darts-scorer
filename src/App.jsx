@@ -671,7 +671,10 @@ export default function App() {
             <p className="text-sm mb-4" style={{ color: C.muted }}>Teams are set by playing order. They drop off the list once they've played.</p>
             <div className="space-y-2">
               {availableGroups().map(grp => (
-                <Btn key={grp[0]} onClick={() => pickGroup(grp)} color={C.brassDim}>{grp.map(p => players[p]).join(' & ')}</Btn>
+                <Btn key={grp[0]} onClick={() => pickGroup(grp)} color={C.brassDim}>
+                  {grp.map(p => p + 1).join(' & ')}
+                  <div className="text-sm font-medium normal-case tracking-normal mt-0.5" style={{ color: C.cream, opacity: 0.8 }}>{grp.map(p => players[p]).join(', ')}</div>
+                </Btn>
               ))}
             </div>
           </div>
